@@ -1,17 +1,7 @@
-"""
-estadisticas-service
-====================
-Microservicio de ESTADÍSTICAS del casino (FastAPI, solo lectura).
-
-Agrega KPIs sobre las tablas compartidas (transacciones, usuarios, apuestas) y
-los expone para el dashboard del frontend. Comparte BD y JWT con casino-backend.
-
-Prefijo de rutas: /api/estadisticas
-"""
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import usuario_actual
@@ -41,15 +31,26 @@ app.add_middleware(
 )
 
 
-# TODO (alumno): implementar las rutas de salud que usará Kubernetes:
-#   - liveness: ¿el proceso está vivo? (respuesta simple).
-#   - readiness: ¿está listo para recibir tráfico? Debe verificar la BD.
-# Luego configurar livenessProbe/readinessProbe en el Deployment de EKS.
+@app.get("/livez", status_code=status.HTTP_200_OK)
+def liveness_probe():
+    return {"status": "alive"}
+
+
+@app.get("/readyz")
+def readiness_probe(response: Response):
+    try:
+        with conexion() as conn:
+            with dict_cursor(conn) as cur:
+                cur.execute("SELECT 1;")
+                cur.fetchone()
+        return {"status": "ready"}
+    except Exception as e:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "unready", "reason": str(e)}
 
 
 @app.get("/api/estadisticas/mias")
 def mis_estadisticas(usuario: dict = Depends(usuario_actual)):
-    """KPIs, desglose por tipo y evolución de saldo del usuario autenticado."""
     uid = usuario["id"]
     with conexion() as conn:
         with dict_cursor(conn) as cur:
@@ -100,7 +101,6 @@ def mis_estadisticas(usuario: dict = Depends(usuario_actual)):
 
 @app.get("/api/estadisticas/globales")
 def estadisticas_globales(usuario: dict = Depends(usuario_actual)):
-    """KPIs de toda la plataforma: usuarios, GGR, top jugadores y apuestas."""
     with conexion() as conn:
         with dict_cursor(conn) as cur:
             cur.execute("SELECT COUNT(*) AS n, COALESCE(SUM(saldo),0) AS saldo FROM usuarios")
