@@ -125,15 +125,19 @@ def estadisticas_globales(usuario: dict = Depends(usuario_actual)):
             )
             top = cur.fetchall()
 
-            cur.execute(
-                """SELECT
-                     COUNT(*) AS total,
-                     COUNT(*) FILTER (WHERE estado = 'ganada')    AS ganadas,
-                     COUNT(*) FILTER (WHERE estado = 'perdida')   AS perdidas,
-                     COUNT(*) FILTER (WHERE estado = 'pendiente') AS pendientes
-                   FROM apuestas"""
-            )
-            ap = cur.fetchone()
+            try:
+                cur.execute(
+                    """SELECT
+                         COUNT(*) AS total,
+                         COUNT(*) FILTER (WHERE estado = 'ganada')    AS ganadas,
+                         COUNT(*) FILTER (WHERE estado = 'perdida')   AS perdidas,
+                         COUNT(*) FILTER (WHERE estado = 'pendiente') AS pendientes
+                       FROM apuestas"""
+                )
+                ap = cur.fetchone()
+            except Exception:
+                conn.rollback()
+                ap = {"total": 0, "ganadas": 0, "perdidas": 0, "pendientes": 0}
 
     resueltas = (ap["ganadas"] or 0) + (ap["perdidas"] or 0)
     win_rate = round(100.0 * (ap["ganadas"] or 0) / resueltas, 1) if resueltas else 0.0
